@@ -2,15 +2,11 @@
 """
 import miner, peer_recieve, time, threading, tools, custom, leveldb, networking, sys, truthcoin_api, blockchain, peers_check, multiprocessing, Queue
 
+#def main(brainwallet):
 if True:
-    i_queue=multiprocessing.Queue()
-    o_queue=multiprocessing.Queue()
     heart_queue=multiprocessing.Queue()
     suggested_blocks=multiprocessing.Queue()
-    o_queue.put('''Truthshell, use 'help help' to learn about the help system''')
-    try:
-        script=file(sys.argv[1],'r').read()
-    except: script=''
+    #o_queue.put('''Truthshell, use 'help help' to learn about the help system''')
     db = leveldb.LevelDB(custom.database_name)
     DB = {'stop':False,
           'mine':False,
@@ -24,18 +20,10 @@ if True:
           'memoized_votes':{},
           'peers_ranked':[],
           'diffLength': '0'}
-    if 'brain_wallet' in dir(custom):
-        DB['privkey']=tools.det_hash(custom.brain_wallet)
-        DB['pubkey']=tools.privtopub(DB['privkey'])
-    elif 'pubkey' in dir(custom):
-        DB['pubkey']=custom.pubkey
-    else:
-        pubkey=raw_input('what is your pubkey or brainwallet? (pubkey can be generated using "./truthd.py new_address") (miners should put brainwallet, security-conscious should put pubkey)\n')
-        if len(pubkey)!=130:
-            DB['privkey']=tools.det_hash(pubkey)
-            DB['pubkey']=tools.privtopub(DB['privkey'])
-        else:
-            DB['pubkey']=pubkey
+    #DB['privkey']=tools.det_hash(brainwallet)
+    print('pw: ' +str(sys.argv[1]))
+    DB['privkey']=tools.det_hash(sys.argv[1])
+    DB['pubkey']=tools.privtopub(DB['privkey'])
     DB['address']=tools.make_address([DB['pubkey']], 1)
     def len_f(i, DB):
         if not tools.db_existence(str(i), DB): return i-1
@@ -83,7 +71,7 @@ if True:
         proc.start()
         return proc
     workers = [start_worker_proc(**task_info) for task_info in worker_tasks]
-    print('use "./truthd" in a different terminal to interact with the system.')
+    print('use "./truth_cli.py" in a different terminal to interact with the system.')
     while not DB['stop']:
         time.sleep(0.5)
     tools.log('stopping all threads...')
