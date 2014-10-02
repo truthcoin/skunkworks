@@ -24,10 +24,13 @@ def genesis(pubkey, DB):
     out = {'version': custom.version,
            'length': 0,
            'time': time.time(),
-           'target': target,
+           'target': target_,
            'diffLength': blockchain.hexInvert(target_),
            'txs': [make_mint(pubkey, DB)]}
-    out = tools.unpackage(tools.package(out))
+    try:
+        out = tools.unpackage(tools.package(out))
+    except:
+        print('could not unpackage: ' +str(out))
     return out
 def make_block(prev_block, txs, pubkey, DB):
     leng = int(prev_block['length']) + 1
@@ -41,7 +44,10 @@ def make_block(prev_block, txs, pubkey, DB):
            'diffLength': diffLength,
            'target': target_,
            'prevHash': tools.det_hash(prev_block)}
-    out = tools.unpackage(tools.package(out))
+    try:
+        out = tools.unpackage(tools.package(out))
+    except:
+        print('could not unpackage: ' +str(out))
     return out
 def POW(block, restart_signal):
     halfHash = tools.det_hash(block)
@@ -85,7 +91,7 @@ def main(pubkey, DB):
             elif DB['mine']:
                 main_once(pubkey, DB, num_cores, solution_queue, workers)
             else:
-                time.sleep(2)
+                time.sleep(0.1)
     except:
         tools.log('miner main: ' +str(sys.exc_info()))
 def main_once(pubkey, DB, num_cores, solution_queue, workers):
@@ -99,8 +105,8 @@ def main_once(pubkey, DB, num_cores, solution_queue, workers):
         worker['in_queue'].put(work)
         worker['in_queue'].put(work)
     start=time.time()
-    while solution_queue.empty() and time.time()<start+30:
-        time.sleep(1)
+    while solution_queue.empty() and time.time()<start+5:#we might mine faster if the 5 was a 30.
+        time.sleep(0.1)
     restart_workers(workers)
     while not solution_queue.empty():
         try:
