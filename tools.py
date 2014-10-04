@@ -1,19 +1,20 @@
 """A bunch of functions that are used by multiple threads.
 """
-import pt, hashlib, re, subprocess, time, copy
+import pt, hashlib, re, subprocess, time, copy, ht
 from json import dumps as package, loads as unpackage
 #from collections import OrderedDict
 
 def heart_monitor(queue):
     beats={}
     while True:
-        time.sleep(0.01)
+        time.sleep(0.5)
         t=time.time()
         for beat in beats:
             if t-beats[beat]>30:
                 beats[beat]=t
                 log('thread has an error: ' +str(beat))
-        if not(queue.empty()):
+        while not(queue.empty()):
+            time.sleep(0.01)
             beat=queue.get(False)
             #log('heart monitor: ' +str(beat))
             if beat=='stop': return
@@ -94,6 +95,19 @@ def kill_processes_using_ports(ports):
             subprocess.Popen(['kill', '-9', pid])
 default_entry={'count': 0, 'amount': 0, 'votecoin':{}, 'votes':{}, 'shares':{}}
 def db_get(n, DB):
+    n=str(n)
+    out=ht.get(n)
+    if out=='undefined':
+        return copy.deepcopy(default_entry)
+    return out
+def db_put(key, dic, DB): return ht.put(str(key), dic)
+def db_delete(key, DB): return db_put(key, 'n', DB)
+def db_existence(key, DB):
+    n=str(key)
+    out=ht.get(n)
+    return not out=='undefined'
+'''
+def db_get(n, DB):
     n = str(n)
     try:
         return unpackage(DB['db'].Get(n))
@@ -109,6 +123,7 @@ def db_existence(key, DB):
         return not a==default_entry
     except:
         return False
+'''
 def count(address, DB):
     # Returns the number of transactions that pubkey has broadcast.
     def zeroth_confirmation_txs(address, DB):
@@ -119,3 +134,8 @@ def count(address, DB):
     current = db_get(address, DB)['count']
     zeroth=zeroth_confirmation_txs(address, DB)
     return current+zeroth
+def fork_check(newblocks, DB):
+    block = db_get(DB['length'], DB)
+    recent_hash = det_hash(block)
+    their_hashes = map(lambda x: x['prevHash'] if x['length']>0 else 0, newblocks)
+    return (recent_hash not in their_hashes) and DB['length']>=newblocks[0]['length']-1

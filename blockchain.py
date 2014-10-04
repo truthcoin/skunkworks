@@ -43,7 +43,6 @@ def add_tx(tx, DB):
         if too_big_block(tx, txs):
             out[0]+='too many txs'
             return False
-        tools.log('before tx check')
         if not transactions.tx_check[tx['type']](tx, txs, out, DB):
             out[0]+= 'tx: ' + str(tx)
             return False
@@ -84,6 +83,7 @@ def add_block(block_pair, DB):
         return sorted(mylist)[len(mylist) / 2]
 
     def block_check(block, DB):
+        def log_(txt): pass #return tools.log(txt)
         def tx_check(txs):
             start = copy.deepcopy(txs)
             out = []
@@ -100,33 +100,44 @@ def add_block(block_pair, DB):
         if not isinstance(block, dict): return False
         if 'error' in block: return False
         if not tools.E_check(block, 'length', [int]):
+            log_('no length')
             return False
         length = DB['length']
         if int(block['length']) != int(length) + 1:
+            log_('wrong longth')
             return False
         if block['diffLength'] != hexSum(DB['diffLength'],
                                          hexInvert(block['target'])):
+            log_('diflength error')
             return False
         if length >= 0:
             if tools.det_hash(tools.db_get(length, DB)) != block['prevHash']:
+                log_('det hash error')
                 return False
         a = copy.deepcopy(block)
         a.pop('nonce')
         if u'target' not in block.keys():
+            log_('target error')
             return False
         half_way = {u'nonce': block['nonce'], u'halfHash': tools.det_hash(a)}
         if tools.det_hash(half_way) > block['target']:
+            log_('det hash error 2')
             return False
         if block['target'] != target.target(DB, block['length']):
+            log_('wrong target')
             return False
         earliest = median(recent_blockthings('time', DB, custom.mmm))
-        if 'time' not in block:
+        if 'time' not in block: 
+            log_('no time')
             return False
-        if block['time'] > time.time():
+        if block['time'] > time.time()+60*6: 
+            log_('too late')
             return False
-        if block['time'] < earliest:
+        if block['time'] < earliest: 
+            log_('too early')
             return False
-        if tx_check(block['txs']):
+        if tx_check(block['txs']): 
+            log_('tx check')
             return False
         return True
     if type(block_pair)==type([1,2,3]):
@@ -205,16 +216,19 @@ def delete_block(DB):
     for orphan in sorted(orphans, key=lambda x: x['count']):
         add_tx(orphan, DB)
 def suggestions(DB, s, f):
+    heart_time=time.time()
     while True:
-        DB['heart_queue'].put(s)
-        for i in range(100):
-            time.sleep(0.01)
-            if DB['stop']: return
-            if not DB[s].empty():
-                try:
-                    f(DB[s].get(False), DB)
-                except:
-                    tools.log('suggestions ' + s + ' '+str(sys.exc_info()))
+        if time.time()-heart_time>10:
+            DB['heart_queue'].put(s)
+            heart_time=time.time()
+        time.sleep(0.5)
+        while not DB[s].empty():
+            time.sleep(0.002)
+            try:
+                f(DB[s].get(False), DB)
+            except:
+                tools.log('suggestions ' + s + ' '+str(sys.exc_info()))
+                error()
 def suggestion_txs(DB): 
     try:
         return suggestions(DB, 'suggested_txs', add_tx)

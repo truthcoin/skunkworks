@@ -4,11 +4,6 @@ This file explains how we initiate interactions with our peers.
 import time, networking, tools, blockchain, custom, random, sys
 def cmd(peer, x):
     return networking.send_command(peer, x)
-def fork_check(newblocks, DB):
-    block = tools.db_get(DB['length'], DB)
-    recent_hash = tools.det_hash(block)
-    their_hashes = map(tools.det_hash, newblocks)
-    return recent_hash not in their_hashes
 def bounds(length, peers_block_count):
     if peers_block_count - length > custom.download_many:
         end = length + custom.download_many - 1
@@ -16,20 +11,21 @@ def bounds(length, peers_block_count):
         end = peers_block_count
     return [max(length - 2, 0), end+1]
 def download_blocks(peer, DB, peers_block_count, length):
-    b=bounds(length, peers_block_count['length'])
-    tools.log('bounds requested: ' +str(b))
+    b=[max(0, length), min(peers_block_count['length'], length+custom.download_many)]
+    #tools.log('asked for: ' +str(b))
     blocks = cmd(peer, {'type': 'rangeRequest',
                         'range': b})
-    tools.log('recieved: ' +str(len(blocks)))
+    if type(blocks)!=list:
+        #tools.log('unable to download blocks that time')
+        return 0
     if not isinstance(blocks, list):
         return []
     for i in range(20):  # Only delete a max of 20 blocks, otherwise a
         # peer might trick us into deleting everything over and over.
-        if fork_check(blocks, DB):
+        if tools.fork_check(blocks, DB):
             blockchain.delete_block(DB)
     for block in blocks:
         DB['suggested_blocks'].put([block, peer])
-    time.sleep(1)
     return 0
 def ask_for_txs(peer, DB):
     txs = cmd(peer, {'type': 'txs'})
@@ -46,8 +42,9 @@ def give_block(peer, DB, block_count_peer):
     #           'block': tools.db_get(block_count_l + 1,
     #                                 DB)})
     blocks=[]
-    b=bounds(block_count_peer+1, DB['length'])
-    for i in range(b[0], b[1]):
+    #b=bounds(block_count_peer+1, DB['length'])
+    b=[max(block_count_peer+1, 0), min(DB['length'], block_count_peer+custom.download_many)]
+    for i in range(b[0], b[1]+1):
         blocks.append(tools.db_get(i, DB))
     cmd(peer, {'type': 'pushblock',
                'blocks': blocks})
@@ -65,8 +62,14 @@ def peer_check(peer, DB):
     if them < us:
         return give_block(peer, DB, block_count['length'])
     if us == them:
-        return ask_for_txs(peer, DB)
-    return download_blocks(peer, DB, block_count, length)
+        try:
+            return ask_for_txs(peer, DB)
+        except:
+            tools.log('ask for tx error')
+    try:
+        return download_blocks(peer, DB, block_count, length)
+    except:
+        tools.log('peer check bottom')
 def exponential_random(weights):
     def grab(r, weights, counter=0):
         if len(weights)==0: return counter
@@ -90,9 +93,12 @@ def main(peers, DB):
         tools.log('main peers check: ' +str(sys.exc_info()))
 def main_once(peers, DB):
         DB['peers_ranked']=sorted(DB['peers_ranked'], key=lambda r: r[1])
-        time.sleep(4)
+        if DB['suggested_blocks'].empty():
+            time.sleep(10)
+        while not DB['suggested_blocks'].empty():
+            time.sleep(0.1)
+        #tools.log('suggested_blocks emptied at : ' +str(time.time()))
         DB['heart_queue'].put('peers check')
-        #i=exponential_random(len(DB['peers_ranked']), 0.4)
         i=exponential_random(map(lambda x: x[1], DB['peers_ranked']))
         t1=time.time()
         r=peer_check(DB['peers_ranked'][i][0], DB)
